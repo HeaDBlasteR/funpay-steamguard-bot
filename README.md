@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Create a .env file, copy .env.example into it, and paste your data in there.
+Create a `.env` file, copy `.env.example` into it, and paste your data in there.
 
 ## Run
 

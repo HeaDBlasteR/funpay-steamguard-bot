@@ -25,24 +25,13 @@ Automatically retrieves Steam Guard codes from an IMAP mailbox and sends them to
 - FunPay account
 - IMAP-enabled mailbox
 
-## Project structure
-
-bot/
-    __init__.py
-    __main__.py
-    config.py
-    handlers.py
-    logger.py
-    mail.py
-    main.py
-
 ## Installation
 
 pip install -r requirements.txt
 
 ## Configuration
 
-Copy `.env.example` to `.env`.
+Create a .env file, copy .env.example into it, and paste your data in there.
 
 ## Run
 

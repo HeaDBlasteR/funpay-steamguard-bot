@@ -82,10 +82,10 @@ def extract_code(text: str) -> str | None:
 def is_fresh(message: Message) -> bool:
     """Проверяет, что письмо достаточно свежее."""
 
-    date_header = message.get("Дата")
+    date_header = message.get("Date")
 
     if not date_header:
-        logger.warning("В сообщении отсутствует заголовок "Дата".")
+        logger.warning('В сообщении отсутствует заголовок "Date".')
         return False
 
     try:

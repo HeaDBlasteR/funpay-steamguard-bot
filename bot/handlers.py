@@ -60,6 +60,18 @@ def handle_event(acc, event) -> None:
 
         try:
             acc.send_message(chat_id, reply)
-            logger.info(f"Отправлено в чат {chat_id}: {reply}")
+
+            if code:
+                acc.send_message(
+                    chat_id,
+                    "Буду рад вашему отзыву <3",
+                )
+
+            logger.info(
+                "Отправлено в чат %s: %s",
+                chat_id,
+                reply,
+            )
+
         except Exception:
             logger.exception("Ошибка отправки")

@@ -10,6 +10,7 @@ Automatically retrieves Steam Guard codes from an IMAP mailbox and sends them to
 - Automatic runner restart
 - Environment variables
 - Logging
+- Automatic lot bumping
 
 ## Stack
 

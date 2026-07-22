@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 
 from FunPayAPI import Account, Runner
 
@@ -11,6 +12,7 @@ from .config import (
 )
 
 from .handlers import handle_event
+from .raiser import raise_lots_loop
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,12 @@ def main() -> None:
         acc.username,
         acc.id,
     )
+
+    threading.Thread(
+        target=raise_lots_loop,
+        args=(acc,),
+        daemon=True,
+    ).start()
 
     while True:
         try:

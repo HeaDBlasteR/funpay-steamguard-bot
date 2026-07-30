@@ -5,15 +5,9 @@ import re
 
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parsedate_to_datetime
+from email.utils import parsedate_to_datetime, parseaddr
 
-from .config import (
-    EMAIL_LOGIN,
-    EMAIL_PASSWORD,
-    IMAP_SERVER,
-    IMAP_PORT,
-    CODE_MAX_AGE_SECONDS,
-)
+from .config import CODE_MAX_AGE_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +16,7 @@ STEAM_CODE_PATTERNS = (
     r"[Gg]uard[^A-Z0-9]{1,30}([A-Z0-9]{5})",
     r"[Cc]ode[^A-Z0-9]{1,10}([A-Z0-9]{5})",
     r"[Кк]од[^A-Z0-9А-Яа-я]{1,10}([A-Z0-9]{5})",
-    r"(?:^|\n)\s*([A-Z0-9]{5})\s*(?:\n|$)",
+    r"\b([A-Z0-9]{5})\b",
 )
 
 
@@ -39,23 +33,32 @@ def extract_body(message: Message) -> str:
             ):
                 continue
 
-            charset = part.get_content_charset() or "utf-8"
+            try:
+                charset = part.get_content_charset() or "utf-8"
 
-            body += part.get_payload(
+                body += part.get_payload(
+                    decode=True,
+                ).decode(
+                    charset,
+                    errors="replace",
+                )
+
+            except Exception:
+                pass
+
+    else:
+        try:
+            charset = message.get_content_charset() or "utf-8"
+
+            body = message.get_payload(
                 decode=True,
             ).decode(
                 charset,
                 errors="replace",
             )
-    else:
-        charset = message.get_content_charset() or "utf-8"
 
-        body = message.get_payload(
-            decode=True,
-        ).decode(
-            charset,
-            errors="replace",
-        )
+        except Exception:
+            pass
 
     return body
 
@@ -117,82 +120,73 @@ def fetch_message(
 
     _, data = mail.fetch(message_id, "(RFC822)")
 
-    raw = data[0][1]
-
-    return email.message_from_bytes(raw)
+    return email.message_from_bytes(data[0][1])
 
 
-def get_steam_guard_code() -> str | None:
+def get_steam_guard_code(
+    mail: imaplib.IMAP4_SSL,
+) -> str | None:
     """
     Возвращает последний актуальный Steam Guard код.
     """
 
-    mail = None
+    status, _ = mail.select(
+        "INBOX",
+        readonly=True,
+    )
 
-    try:
-        mail = imaplib.IMAP4_SSL(
-            IMAP_SERVER,
-            IMAP_PORT,
+    if status != "OK":
+        logger.error("Не удалось открыть INBOX")
+        return None
+
+    status, data = mail.search(
+        None,
+        "ALL",
+    )
+
+    if status != "OK":
+        logger.error("Не удалось получить список писем")
+        return None
+
+    message_ids = data[0].split()
+
+    if not message_ids:
+        logger.warning(
+            "Адреса электронной почты Steam не найдены."
+        )
+        return None
+
+    for message_id in reversed(message_ids[-20:]):
+
+        message = fetch_message(
+            mail,
+            message_id,
         )
 
-        mail.login(
-            EMAIL_LOGIN,
-            EMAIL_PASSWORD,
-        )
+        sender = parseaddr(
+            message.get("From")
+        )[1].lower()
 
-        mail.select("INBOX")
+        if sender != "noreply@steampowered.com":
+            continue
 
-        _, data = mail.search(
-            None,
-            'FROM "noreply@steampowered.com"',
-        )
+        if not is_fresh(message):
+            continue
 
-        message_ids = data[0].split()
+        body = extract_body(message)
 
-        if not message_ids:
-            logger.warning(
-                "Адреса электронной почты Steam не найдены."
-            )
-            return None
+        code = extract_code(body)
 
-        for message_id in reversed(message_ids):
-            message = fetch_message(
-                mail,
-                message_id,
-            )
-
-            if not is_fresh(message):
-                break
-
-            body = extract_body(message)
-
-            code = extract_code(body)
-
-            if code:
-                return code
-
-            logger.warning(
-                "Код Steam не найден в сообщении %s.",
-                message_id.decode(),
-            )
+        if code:
+            return code
 
         logger.warning(
-            "Новые коды Steam Guard не найдены."
+            "Код Steam не найден в сообщении %s.",
+            message_id.decode(),
         )
 
-        return None
+    logger.warning(
+        "Новые коды Steam Guard не найдены."
+    )
 
-    except imaplib.IMAP4.error:
-        logger.exception("IMAP error.")
-        return None
-
-    except Exception:
-        logger.exception("Не удалось прочитать почту.")
-        return None
-
-    finally:
-        if mail is not None:
-            try:
-                mail.logout()
-            except Exception:
-                pass
+    return None

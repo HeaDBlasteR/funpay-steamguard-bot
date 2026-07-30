@@ -138,7 +138,10 @@ def handle_event(acc, event) -> None:
             pass
 
     if code:
-        reply = f"🔑 Steam Guard: {code}"
+        reply = (
+            f"🔑 Steam Guard: {code}\n"
+            "⭐Буду рад вашему отзыву <3"
+        )
     else:
         reply = (
             "⚠️ Не удалось получить Steam Guard код за отведённое время. "
@@ -147,12 +150,6 @@ def handle_event(acc, event) -> None:
 
     try:
         acc.send_message(chat_id, reply)
-
-        if code:
-            acc.send_message(
-                chat_id,
-                "Буду рад вашему отзыву <3",
-            )
 
         logger.info(
             "Отправлено в чат %s: %s",

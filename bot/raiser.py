@@ -57,6 +57,7 @@ def raise_lots_loop(acc: Account) -> None:
                         e,
                     )
                     next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
+                time.sleep(2)
         except Exception as e:
             logger.error(
                 "Ошибка получения списка лотов: %s",

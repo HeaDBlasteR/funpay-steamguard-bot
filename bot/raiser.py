@@ -12,11 +12,30 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 
+SESSION_REFRESH_INTERVAL = 30 * 60
+
+
+def _refresh_session(acc: Account) -> bool:
+    try:
+        acc.get(update_phpsessid=True)
+        logger.info("Сессия аккаунта обновлена (PHPSESSID/csrf-token).")
+        return True
+    except Exception as e:
+        logger.error("Не удалось обновить сессию аккаунта: %s", e)
+        return False
+
 
 def raise_lots_loop(acc: Account) -> None:
     next_raise_time: dict[int, float] = {}
+    last_session_refresh = time.time()
 
     while True:
+        now = time.time()
+
+        if now - last_session_refresh > SESSION_REFRESH_INTERVAL:
+            if _refresh_session(acc):
+                last_session_refresh = now
+
         try:
             user_obj = acc.get_user(acc.id)
             categories = {}
@@ -35,6 +54,14 @@ def raise_lots_loop(acc: Account) -> None:
                         category.name,
                     )
                     next_raise_time[cat_id] = now + RAISE_DEFAULT_DELAY
+                except exceptions.UnauthorizedError:
+                    logger.warning(
+                        "Сессия протухла при поднятии '%s', обновляю...",
+                        category.name,
+                    )
+                    if _refresh_session(acc):
+                        last_session_refresh = time.time()
+                    next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
                 except exceptions.RaiseError as e:
                     if e.wait_time:
                         next_raise_time[cat_id] = now + e.wait_time
@@ -58,6 +85,12 @@ def raise_lots_loop(acc: Account) -> None:
                     )
                     next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
                 time.sleep(2)
+        except exceptions.UnauthorizedError:
+            logger.warning(
+                "Сессия протухла при получении списка лотов, обновляю..."
+            )
+            if _refresh_session(acc):
+                last_session_refresh = time.time()
         except Exception as e:
             logger.error(
                 "Ошибка получения списка лотов: %s",

@@ -18,6 +18,12 @@ import time
 logger = logging.getLogger(__name__)
 
 
+def _connect_mail() -> imaplib.IMAP4_SSL:
+    mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+    mail.login(EMAIL_LOGIN, EMAIL_PASSWORD)
+    return mail
+
+
 def handle_event(acc, event) -> None:
     """Обрабатывает одно событие от раннера."""
 
@@ -46,15 +52,7 @@ def handle_event(acc, event) -> None:
     )
 
     try:
-        mail = imaplib.IMAP4_SSL(
-            IMAP_SERVER,
-            IMAP_PORT,
-        )
-
-        mail.login(
-            EMAIL_LOGIN,
-            EMAIL_PASSWORD,
-        )
+        mail = _connect_mail()
 
     except Exception:
         logger.exception("Не удалось подключиться к почте.")
@@ -95,16 +93,7 @@ def handle_event(acc, event) -> None:
                 )
 
                 try:
-                    mail = imaplib.IMAP4_SSL(
-                        IMAP_SERVER,
-                        IMAP_PORT,
-                    )
-
-                    mail.login(
-                        EMAIL_LOGIN,
-                        EMAIL_PASSWORD,
-                    )
-
+                    mail = _connect_mail()
                     code = get_steam_guard_code(mail)
 
                 except Exception:

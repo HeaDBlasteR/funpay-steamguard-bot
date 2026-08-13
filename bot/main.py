@@ -13,6 +13,7 @@ from .config import (
 
 from .handlers import handle_event
 from .raiser import raise_lots_loop
+from .restock import restock_lots_loop
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,12 @@ def main() -> None:
 
     threading.Thread(
         target=raise_lots_loop,
+        args=(acc,),
+        daemon=True,
+    ).start()
+
+    threading.Thread(
+        target=restock_lots_loop,
         args=(acc,),
         daemon=True,
     ).start()

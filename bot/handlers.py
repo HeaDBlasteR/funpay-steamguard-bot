@@ -76,7 +76,8 @@ def handle_event(acc, event) -> None:
         ):
 
             logger.info(
-                f"Попытка {attempt}/{MAX_CODE_REQUEST_ATTEMPTS} получить Steam Guard код..."
+                f"Попытка {attempt}/{MAX_CODE_REQUEST_ATTEMPTS} "
+                "получить Steam Guard код..."
             )
 
             try:

@@ -8,21 +8,11 @@ from .config import (
     RAISE_CHECK_INTERVAL,
     RAISE_DEFAULT_DELAY,
     RAISE_RETRY_DELAY,
+    SESSION_REFRESH_INTERVAL,
 )
+from .session import refresh_session
 
 logger = logging.getLogger(__name__)
-
-SESSION_REFRESH_INTERVAL = 30 * 60
-
-
-def _refresh_session(acc: Account) -> bool:
-    try:
-        acc.get(update_phpsessid=True)
-        logger.info("Сессия аккаунта обновлена (PHPSESSID/csrf-token).")
-        return True
-    except Exception as e:
-        logger.error("Не удалось обновить сессию аккаунта: %s", e)
-        return False
 
 
 def raise_lots_loop(acc: Account) -> None:
@@ -33,7 +23,7 @@ def raise_lots_loop(acc: Account) -> None:
         now = time.time()
 
         if now - last_session_refresh > SESSION_REFRESH_INTERVAL:
-            if _refresh_session(acc):
+            if refresh_session(acc):
                 last_session_refresh = now
 
         try:
@@ -59,7 +49,7 @@ def raise_lots_loop(acc: Account) -> None:
                         "Сессия протухла при поднятии '%s', обновляю...",
                         category.name,
                     )
-                    if _refresh_session(acc):
+                    if refresh_session(acc):
                         last_session_refresh = time.time()
                     next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
                 except exceptions.RaiseError as e:
@@ -89,7 +79,7 @@ def raise_lots_loop(acc: Account) -> None:
             logger.warning(
                 "Сессия протухла при получении списка лотов, обновляю..."
             )
-            if _refresh_session(acc):
+            if refresh_session(acc):
                 last_session_refresh = time.time()
         except Exception as e:
             logger.error(

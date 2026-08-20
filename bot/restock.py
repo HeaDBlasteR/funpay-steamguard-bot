@@ -1,6 +1,7 @@
 import logging
 import time
 
+import requests
 from bs4 import BeautifulSoup
 
 from FunPayAPI import Account, types
@@ -11,12 +12,12 @@ from .config import (
     RESTOCK_INTERVAL,
     RESTOCK_AMOUNT,
     RESTOCK_DELAY_BETWEEN_LOTS,
+    RESTOCK_FETCH_RETRY_ATTEMPTS,
+    RESTOCK_FETCH_RETRY_DELAY,
 )
+from .session import refresh_session
 
 logger = logging.getLogger(__name__)
-
-FETCH_RETRY_ATTEMPTS = 3
-FETCH_RETRY_DELAY = 5
 
 
 def _fetch_lot_fields(acc: Account, lot: LotShortcut) -> types.LotFields:
@@ -96,39 +97,38 @@ def _fetch_lot_fields(acc: Account, lot: LotShortcut) -> types.LotFields:
 
 
 def _restock_lot(acc: Account, lot: LotShortcut) -> None:
-    fields = None
-
-    for attempt in range(1, FETCH_RETRY_ATTEMPTS + 1):
+    for attempt in range(1, RESTOCK_FETCH_RETRY_ATTEMPTS + 1):
         try:
             fields = _fetch_lot_fields(acc, lot)
-            break
-        except ValueError:
-            if attempt == FETCH_RETRY_ATTEMPTS:
+
+            if fields.amount is None:
+                logger.info(
+                    "Лот id=%s пропущен: у него нет параметра "
+                    "'количество товара'.",
+                    lot.id,
+                )
+                return
+
+            fields.amount = RESTOCK_AMOUNT
+            acc.save_lot(fields)
+
+            logger.info(
+                "Лот id=%s: количество товара выставлено на %s.",
+                lot.id,
+                RESTOCK_AMOUNT,
+            )
+            return
+        except (ValueError, requests.exceptions.RequestException):
+            if attempt == RESTOCK_FETCH_RETRY_ATTEMPTS:
                 raise
             logger.warning(
                 "Лот %s: попытка %s/%s не удалась, повтор через %sс...",
                 lot.id,
                 attempt,
-                FETCH_RETRY_ATTEMPTS,
-                FETCH_RETRY_DELAY,
+                RESTOCK_FETCH_RETRY_ATTEMPTS,
+                RESTOCK_FETCH_RETRY_DELAY,
             )
-            time.sleep(FETCH_RETRY_DELAY)
-
-    if fields.amount is None:
-        logger.info(
-            "Лот id=%s пропущен: у него нет параметра 'количество товара'.",
-            lot.id,
-        )
-        return
-
-    fields.amount = RESTOCK_AMOUNT
-    acc.save_lot(fields)
-
-    logger.info(
-        "Лот id=%s: количество товара выставлено на %s.",
-        lot.id,
-        RESTOCK_AMOUNT,
-    )
+            time.sleep(RESTOCK_FETCH_RETRY_DELAY)
 
 
 def restock_lots_loop(acc: Account) -> None:
@@ -151,15 +151,15 @@ def restock_lots_loop(acc: Account) -> None:
                         "обновляю...",
                         lot.id,
                     )
-                    try:
-                        acc.get(update_phpsessid=True)
-                        _restock_lot(acc, lot)
-                    except Exception:
-                        logger.exception(
-                            "Не удалось обновить лот %s после "
-                            "переподключения.",
-                            lot.id,
-                        )
+                    if refresh_session(acc):
+                        try:
+                            _restock_lot(acc, lot)
+                        except Exception:
+                            logger.exception(
+                                "Не удалось обновить лот %s после "
+                                "переподключения.",
+                                lot.id,
+                            )
                 except Exception:
                     logger.exception(
                         "Ошибка обновления количества товара лота %s.",
@@ -172,10 +172,7 @@ def restock_lots_loop(acc: Account) -> None:
             logger.warning(
                 "Сессия просрочена при получении списка лотов, обновляю..."
             )
-            try:
-                acc.get(update_phpsessid=True)
-            except Exception:
-                logger.exception("Не удалось обновить сессию аккаунта.")
+            refresh_session(acc)
         except Exception:
             logger.exception("Ошибка получения списка лотов для пополнения.")
 

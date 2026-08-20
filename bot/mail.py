@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime, parseaddr
 
-from .config import CODE_MAX_AGE_SECONDS
+from .config import CODE_MAX_AGE_SECONDS, MAIL_SCAN_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,6 @@ STEAM_CODE_PATTERNS = (
 
 
 def extract_body(message: Message) -> str:
-    """Возвращает текст письма."""
-
     body = ""
 
     if message.is_multipart():
@@ -63,8 +61,6 @@ def extract_body(message: Message) -> str:
 
 
 def extract_code(text: str) -> str | None:
-    """Извлекает Steam Guard код из текста."""
-
     for pattern in STEAM_CODE_PATTERNS:
         match = re.search(pattern, text, re.MULTILINE)
 
@@ -82,8 +78,6 @@ def extract_code(text: str) -> str | None:
 
 
 def is_fresh(message: Message) -> bool:
-    """Проверяет, что письмо достаточно свежее."""
-
     date_header = message.get("Date")
 
     if not date_header:
@@ -115,8 +109,6 @@ def fetch_message(
     mail: imaplib.IMAP4_SSL,
     message_id: bytes,
 ) -> Message:
-    """Получает письмо по его ID."""
-
     _, data = mail.fetch(message_id, "(RFC822)")
 
     return email.message_from_bytes(data[0][1])
@@ -125,10 +117,6 @@ def fetch_message(
 def get_steam_guard_code(
     mail: imaplib.IMAP4_SSL,
 ) -> str | None:
-    """
-    Возвращает последний актуальный Steam Guard код.
-    """
-
     status, _ = mail.select(
         "INBOX",
         readonly=True,
@@ -155,7 +143,7 @@ def get_steam_guard_code(
         )
         return None
 
-    for message_id in reversed(message_ids[-20:]):
+    for message_id in reversed(message_ids[-MAIL_SCAN_LIMIT:]):
 
         message = fetch_message(
             mail,

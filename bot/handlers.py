@@ -9,6 +9,7 @@ from .config import (
     EMAIL_PASSWORD,
     IMAP_SERVER,
     IMAP_PORT,
+    MAIL_TIMEOUT,
 )
 
 import imaplib
@@ -19,14 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def _connect_mail() -> imaplib.IMAP4_SSL:
-    mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+    mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT, timeout=MAIL_TIMEOUT)
     mail.login(EMAIL_LOGIN, EMAIL_PASSWORD)
     return mail
 
 
 def handle_event(acc, event) -> None:
-    """Обрабатывает одно событие от раннера."""
-
     if event.type is not enums.EventTypes.NEW_MESSAGE:
         return
 

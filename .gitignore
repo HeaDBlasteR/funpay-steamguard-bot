@@ -12,6 +12,7 @@ requirements-dev.txt
 .vscode/
 
 *.log
+logs/
 
 dist/
 build/

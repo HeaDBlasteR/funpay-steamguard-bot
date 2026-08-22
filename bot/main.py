@@ -8,15 +8,19 @@ from .config import (
     GOLDEN_KEY,
     GOLDEN_SEAL,
     RESTART_DELAY_SECONDS,
+    EVENT_HANDLER_MAX_WORKERS,
     validate_config,
 )
 
 from .handlers import handle_event
+from .notifier import notify_crash
 from .raiser import raise_lots_loop
 from .restock import restock_lots_loop
 from .session import enable_golden_seal_auto_refresh
 
 logger = logging.getLogger(__name__)
+
+_event_handler_semaphore = threading.Semaphore(EVENT_HANDLER_MAX_WORKERS)
 
 
 def create_account() -> Account:
@@ -30,6 +34,8 @@ def _handle_event_safely(acc: Account, event) -> None:
         handle_event(acc, event)
     except Exception:
         logger.exception("Ошибка обработки события")
+    finally:
+        _event_handler_semaphore.release()
 
 
 def main() -> None:
@@ -62,6 +68,7 @@ def main() -> None:
             runner = Runner(acc)
             logger.info("Раннер запущен, слушаем события...")
             for event in runner.listen(requests_delay=30):
+                _event_handler_semaphore.acquire()
                 threading.Thread(
                     target=_handle_event_safely,
                     args=(acc, event),
@@ -71,9 +78,10 @@ def main() -> None:
         except KeyboardInterrupt:
             logger.info("Бот остановлен вручную.")
             break
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "Программа завершилась с ошибкой. Перезапуск через %s секунд.",
                 RESTART_DELAY_SECONDS,
             )
+            notify_crash(e)
             time.sleep(RESTART_DELAY_SECONDS)

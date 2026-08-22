@@ -5,6 +5,7 @@ from .config import (
     TRIGGER_CMD,
     MAX_CODE_REQUEST_ATTEMPTS,
     CODE_REQUEST_DELAY,
+    CODE_REQUEST_COOLDOWN_SECONDS,
     EMAIL_LOGIN,
     EMAIL_PASSWORD,
     IMAP_SERVER,
@@ -14,15 +15,42 @@ from .config import (
 
 import imaplib
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
+
+_last_request_lock = threading.Lock()
+_last_request_time: dict[int, float] = {}
 
 
 def _connect_mail() -> imaplib.IMAP4_SSL:
     mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT, timeout=MAIL_TIMEOUT)
     mail.login(EMAIL_LOGIN, EMAIL_PASSWORD)
     return mail
+
+
+def _is_rate_limited(buyer_id: int) -> bool:
+    now = time.time()
+
+    with _last_request_lock:
+        last = _last_request_time.get(buyer_id, 0)
+
+        if now - last < CODE_REQUEST_COOLDOWN_SECONDS:
+            return True
+
+        _last_request_time[buyer_id] = now
+        return False
+
+
+def _buyer_has_valid_order(acc, buyer_username: str) -> bool:
+    _, orders = acc.get_sells(
+        buyer=buyer_username,
+        include_paid=True,
+        include_closed=True,
+        include_refunded=False,
+    )
+    return bool(orders)
 
 
 def handle_event(acc, event) -> None:
@@ -47,8 +75,61 @@ def handle_event(acc, event) -> None:
 
     logger.info(
         f"Команда !code от {buyer}"
-        f" в чате {chat_id}. Проверяю почту..."
+        f" в чате {chat_id}."
     )
+
+    if _is_rate_limited(msg.author_id):
+        logger.info(
+            "Повторный запрос от %s раньше чем через %s секунд, игнорирую.",
+            buyer,
+            CODE_REQUEST_COOLDOWN_SECONDS,
+        )
+
+        try:
+            acc.send_message(
+                chat_id,
+                "⏳ Код уже был запрошен недавно, подождите немного и попробуйте снова.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    try:
+        has_valid_order = _buyer_has_valid_order(acc, buyer)
+    except Exception:
+        logger.exception(
+            "Не удалось проверить заказы покупателя %s.",
+            buyer,
+        )
+
+        try:
+            acc.send_message(
+                chat_id,
+                "⚠️ Не удалось проверить заказ. Попробуйте позже.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    if not has_valid_order:
+        logger.info(
+            "У %s нет оплаченного или закрытого заказа, код не выдан.",
+            buyer,
+        )
+
+        try:
+            acc.send_message(
+                chat_id,
+                "❌ Код выдаётся только по оплаченному или закрытому заказу.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    logger.info("Проверяю почту...")
 
     try:
         mail = _connect_mail()

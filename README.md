@@ -5,13 +5,15 @@ A FunPay chat bot that delivers Steam Guard codes to buyers on demand, keeps lot
 ## Features
 
 - **On-demand code delivery** — buyer sends `!code` in chat, the bot scans the mailbox for the latest Steam Guard email and replies with the code
+- **Order verification** — the code is only delivered to buyers with a paid or closed order; buyers with no order or a refunded one are turned away
+- **Per-buyer cooldown** — repeat `!code` requests from the same buyer within 60 seconds are deduped instead of re-triggering a mail lookup
 - **Resilient mail fetching** — retries across multiple attempts, auto-reconnects on dropped IMAP connections, filters by sender and message freshness, and parses both English and Russian code formats
 - **Automatic lot bumping** — raises lots per category on a schedule, honoring FunPay's rate-limit wait times
 - **Automatic restock** — periodically resets lot quantities so listings don't run dry
 - **Automatic session refresh** — refreshes `PHPSESSID` on a timer and transparently picks up a rotated `golden_seal` from response cookies, persisting it back to `.env`
-- **Parallel event handling** — each incoming chat event is processed in its own thread, so a slow mail lookup for one buyer doesn't block others
-- **Auto-restart** — the runner loop restarts itself if it crashes
-- **Structured logging**
+- **Parallel event handling** — each incoming chat event is processed in its own thread (capped at 10 concurrent), so a slow mail lookup for one buyer doesn't block others
+- **Auto-restart** — the runner loop restarts itself if it crashes, with an optional Telegram notification on each crash
+- **Structured logging** — to console and to a rotating log file
 
 ## Stack
 
@@ -38,6 +40,7 @@ Create a `.env` file (copy `.env.example`) with your credentials:
 
 - `GOLDEN_KEY`, `GOLDEN_SEAL` — FunPay account cookies
 - `EMAIL_LOGIN`, `EMAIL_PASSWORD` — mailbox credentials
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — optional, enables a Telegram notification whenever the runner crashes and restarts
 
 Everything else (IMAP server, timing intervals, restock amount, retry limits, etc.) is configured via constants in `bot/config.py`.
 

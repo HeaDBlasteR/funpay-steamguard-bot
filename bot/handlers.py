@@ -11,14 +11,19 @@ from .config import (
     IMAP_SERVER,
     IMAP_PORT,
     MAIL_TIMEOUT,
+    REVIEW_REPLY_MIN_STARS,
+    REVIEW_REPLY_TEXT,
 )
 
 import imaplib
 import logging
+import re
 import threading
 import time
 
 logger = logging.getLogger(__name__)
+
+_ORDER_ID_RE = re.compile(r"#([A-Z0-9]{8})")
 
 _last_request_lock = threading.Lock()
 _last_request_time: dict[int, float] = {}
@@ -53,11 +58,42 @@ def _buyer_has_valid_order(acc, buyer_username: str) -> bool:
     return bool(orders)
 
 
+def _reply_to_review(acc, order_id: str) -> None:
+    try:
+        order = acc.get_order(order_id)
+    except Exception:
+        logger.exception("Не удалось получить заказ %s для ответа на отзыв.", order_id)
+        return
+
+    review = order.review
+
+    if review is None or review.stars is None or review.reply is not None:
+        return
+
+    if review.stars < REVIEW_REPLY_MIN_STARS:
+        return
+
+    try:
+        acc.send_review(order_id, REVIEW_REPLY_TEXT, review.stars)
+        logger.info(
+            "Отправлен автоответ на отзыв к заказу %s (%s звёзд).",
+            order_id,
+            review.stars,
+        )
+    except Exception:
+        logger.exception("Не удалось отправить ответ на отзыв к заказу %s.", order_id)
+
+
 def handle_event(acc, event) -> None:
     if event.type is not enums.EventTypes.NEW_MESSAGE:
         return
 
     msg = event.message
+
+    if msg.type is enums.MessageTypes.NEW_FEEDBACK:
+        if match := _ORDER_ID_RE.search(msg.text or ""):
+            _reply_to_review(acc, match.group(1))
+        return
 
     if msg.author_id == acc.id:
         return

@@ -56,6 +56,28 @@ or
 python run.py
 ```
 
+## Deployment (dedicated Ubuntu/Debian server)
+
+For a server running only this bot, `deploy/setup_server.sh` automates the
+one-time setup: system packages, a dedicated non-root user, a virtualenv,
+`.env` scaffolding, a hardened systemd service (auto-restart on crash and on
+reboot), automatic security updates, NTP time sync (needed for the mail
+freshness check in `bot/mail.py`), and a firewall that only allows SSH in.
+
+```bash
+git clone <repo-url> /opt/funpay-steamguard-bot
+cd /opt/funpay-steamguard-bot
+sudo bash deploy/setup_server.sh
+
+sudo -u funpaybot nano .env   # fill in real credentials
+sudo systemctl start funpay-bot
+sudo systemctl status funpay-bot
+sudo journalctl -u funpay-bot -f
+```
+
+The service is enabled at boot and set to `Restart=always`, so it survives
+both an in-process crash and a server reboot.
+
 ## License
 
 MIT

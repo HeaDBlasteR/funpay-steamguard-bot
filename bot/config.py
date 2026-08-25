@@ -45,6 +45,11 @@ RESTOCK_DELAY_BETWEEN_LOTS = 5
 RESTOCK_FETCH_RETRY_ATTEMPTS = 3
 RESTOCK_FETCH_RETRY_DELAY = 5
 
+REVIEW_REPLY_MIN_STARS = 5
+REVIEW_REPLY_TEXT = (
+    "🙏 Спасибо за доверие и отзыв!⭐️"
+)
+
 
 def validate_config() -> None:
     required = {

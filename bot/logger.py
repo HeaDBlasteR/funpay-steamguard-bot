@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from .config import LOG_FILE, LOG_MAX_BYTES, LOG_BACKUP_COUNT
+from .config import LOG_FILE, LOG_MAX_BYTES, LOG_BACKUP_COUNT, LOG_DATE_FORMAT
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
@@ -20,7 +20,7 @@ def setup_logger() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%H:%M:%S",
+        datefmt=LOG_DATE_FORMAT,
         handlers=[
             logging.StreamHandler(),
             file_handler,

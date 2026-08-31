@@ -6,7 +6,6 @@ from FunPayAPI.common import exceptions
 
 from .config import (
     RAISE_CHECK_INTERVAL,
-    RAISE_DEFAULT_DELAY,
     RAISE_RETRY_DELAY,
     SESSION_REFRESH_INTERVAL,
 )
@@ -43,7 +42,7 @@ def raise_lots_loop(acc: Account) -> None:
                         "Лоты категории '%s' подняты.",
                         category.name,
                     )
-                    next_raise_time[cat_id] = now + RAISE_DEFAULT_DELAY
+                    next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
                 except exceptions.UnauthorizedError:
                     logger.warning(
                         "Сессия протухла при поднятии '%s', обновляю...",

@@ -107,6 +107,12 @@ def fetch_lot_fields(acc: Account, lot: LotShortcut) -> types.LotFields:
     return types.LotFields(lot.id, result)
 
 
+def strip_broken_surrogates(value: str) -> str:
+    return "".join(
+        char for char in value if not 0xD800 <= ord(char) <= 0xDFFF
+    )
+
+
 def read_lot_values(fields: types.LotFields) -> dict[str, str]:
     raw = fields.fields
 
@@ -131,13 +137,17 @@ def apply_lot_values(
     amount: int | None,
     active: bool,
 ) -> types.LotFields:
-    fields.title_ru = values["title_ru"]
-    fields.title_en = values["title_en"]
-    fields.description_ru = values["description_ru"]
-    fields.description_en = values["description_en"]
+    clean = {
+        name: strip_broken_surrogates(value) for name, value in values.items()
+    }
+
+    fields.title_ru = clean["title_ru"]
+    fields.title_en = clean["title_en"]
+    fields.description_ru = clean["description_ru"]
+    fields.description_en = clean["description_en"]
     fields.edit_fields({
-        LOT_TEXT_FIELDS["payment_msg_ru"]: values["payment_msg_ru"],
-        LOT_TEXT_FIELDS["payment_msg_en"]: values["payment_msg_en"],
+        LOT_TEXT_FIELDS["payment_msg_ru"]: clean["payment_msg_ru"],
+        LOT_TEXT_FIELDS["payment_msg_en"]: clean["payment_msg_en"],
     })
     fields.price = price
     fields.amount = amount

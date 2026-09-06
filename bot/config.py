@@ -47,6 +47,11 @@ RESTOCK_FETCH_RETRY_DELAY = 5
 
 PRICE_SAVE_DELAY = 1
 
+UI_FONT_PATH = r"C:\Windows\Fonts\segoeui.ttf"
+UI_FONT_BOLD_PATH = r"C:\Windows\Fonts\segoeuib.ttf"
+EMOJI_FONT_PATH = r"C:\Windows\Fonts\seguiemj.ttf"
+UI_FONT_SIZE = 12
+
 REVIEW_REPLY_MIN_STARS = 5
 REVIEW_REPLY_TEXT = (
     "🙏 Спасибо за доверие и отзыв!⭐️"

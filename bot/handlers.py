@@ -62,7 +62,10 @@ def _reply_to_review(acc, order_id: str) -> None:
     try:
         order = acc.get_order(order_id)
     except Exception:
-        logger.exception("Не удалось получить заказ %s для ответа на отзыв.", order_id)
+        logger.exception(
+            "Не удалось получить заказ %s для ответа на отзыв.",
+            order_id,
+        )
         return
 
     if order.seller_id != acc.id:
@@ -88,7 +91,10 @@ def _reply_to_review(acc, order_id: str) -> None:
             review.stars,
         )
     except Exception:
-        logger.exception("Не удалось отправить ответ на отзыв к заказу %s.", order_id)
+        logger.exception(
+            "Не удалось отправить ответ на отзыв к заказу %s.",
+            order_id,
+        )
 
 
 def handle_event(acc, event) -> None:
@@ -131,7 +137,8 @@ def handle_event(acc, event) -> None:
         try:
             acc.send_message(
                 chat_id,
-                "⏳ Код уже был запрошен недавно, подождите немного и попробуйте снова.",
+                "⏳ Код уже был запрошен недавно, "
+                "подождите немного и попробуйте снова.",
             )
         except Exception:
             logger.exception("Ошибка отправки")

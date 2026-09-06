@@ -118,7 +118,9 @@ def _restock_lot(acc: Account, lot: LotShortcut) -> None:
                 RESTOCK_AMOUNT,
             )
             return
-        except (ValueError, requests.exceptions.RequestException):
+        except exceptions.UnauthorizedError:
+            raise
+        except (ValueError, requests.exceptions.RequestException, exceptions.RequestFailedError):
             if attempt == RESTOCK_FETCH_RETRY_ATTEMPTS:
                 raise
             logger.warning(
@@ -154,12 +156,24 @@ def restock_lots_loop(acc: Account) -> None:
                     if refresh_session(acc):
                         try:
                             _restock_lot(acc, lot)
+                        except exceptions.RequestFailedError as e:
+                            logger.error(
+                                "Не удалось обновить лот %s после переподключения: %s",
+                                lot.id,
+                                e.short_str(),
+                            )
                         except Exception:
                             logger.exception(
                                 "Не удалось обновить лот %s после "
                                 "переподключения.",
                                 lot.id,
                             )
+                except exceptions.RequestFailedError as e:
+                    logger.error(
+                        "Ошибка обновления количества товара лота %s: %s",
+                        lot.id,
+                        e.short_str(),
+                    )
                 except Exception:
                     logger.exception(
                         "Ошибка обновления количества товара лота %s.",

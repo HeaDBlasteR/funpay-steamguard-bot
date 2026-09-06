@@ -66,6 +66,13 @@ def raise_lots_loop(acc: Account) -> None:
                             e.short_str(),
                         )
                         next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
+                except exceptions.RequestFailedError as e:
+                    logger.error(
+                        "Ошибка поднятия категории %s: %s",
+                        cat_id,
+                        e.short_str(),
+                    )
+                    next_raise_time[cat_id] = now + RAISE_RETRY_DELAY
                 except Exception as e:
                     logger.error(
                         "Ошибка поднятия категории %s: %s",

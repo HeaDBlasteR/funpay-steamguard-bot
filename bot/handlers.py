@@ -65,6 +65,13 @@ def _reply_to_review(acc, order_id: str) -> None:
         logger.exception("Не удалось получить заказ %s для ответа на отзыв.", order_id)
         return
 
+    if order.seller_id != acc.id:
+        logger.info(
+            "Отзыв к заказу %s оставлен нами как покупателем, пропускаю.",
+            order_id,
+        )
+        return
+
     review = order.review
 
     if review is None or review.stars is None or review.reply is not None:

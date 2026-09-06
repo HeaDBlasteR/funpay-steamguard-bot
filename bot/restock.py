@@ -2,9 +2,8 @@ import logging
 import time
 
 import requests
-from bs4 import BeautifulSoup
 
-from FunPayAPI import Account, types
+from FunPayAPI import Account
 from FunPayAPI.common import exceptions
 from FunPayAPI.types import LotShortcut
 
@@ -15,91 +14,16 @@ from .config import (
     RESTOCK_FETCH_RETRY_ATTEMPTS,
     RESTOCK_FETCH_RETRY_DELAY,
 )
+from .lots import fetch_lot_fields
 from .session import refresh_session
 
 logger = logging.getLogger(__name__)
 
 
-def _fetch_lot_fields(acc: Account, lot: LotShortcut) -> types.LotFields:
-    headers = {
-        "accept": "application/json, text/javascript, */*; q=0.01",
-        "accept-language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-        "content-type": "application/json",
-        "x-requested-with": "XMLHttpRequest",
-        "referer": lot.subcategory.private_link,
-        "user-agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-    }
-    response = acc.method(
-        "get",
-        f"lots/offerEdit?node={lot.subcategory.id}&offer={lot.id}",
-        headers,
-        {},
-        raise_not_200=True,
-    )
-
-    try:
-        json_response = response.json()
-        html = json_response["html"]
-    except ValueError:
-        html = response.text
-
-    bs = BeautifulSoup(html, "html.parser")
-    form = bs.find("input", {"name": "csrf_token"})
-    form = form.find_parent("form") if form else bs
-
-    result = {"active": "", "deactivate_after_sale": ""}
-
-    inputs = form.find_all("input")
-    result.update({
-        field["name"]: field.get("value") or ""
-        for field in inputs
-        if field.get("name")
-        and field["name"] not in ["active", "deactivate_after_sale"]
-    })
-
-    textareas = form.find_all("textarea")
-    result.update({
-        field["name"]: field.text or ""
-        for field in textareas
-        if field.get("name")
-    })
-
-    selects = form.find_all("select")
-    result.update({
-        field["name"]: field.find("option", selected=True)["value"]
-        for field in selects
-        if field.get("name") and field.find("option", selected=True)
-    })
-
-    checkboxes = form.find_all(
-        "input", {"type": "checkbox"}, checked=True,
-    )
-    result.update({
-        field["name"]: "on"
-        for field in checkboxes
-        if field.get("name")
-    })
-
-    if result.get("amount") is None and result.get("price") is None:
-        logger.error(
-            "Лот %s: не удалось найти поля формы редактирования ни в "
-            "JSON, ни в HTML (status=%s). Начало тела ответа: %r",
-            lot.id,
-            response.status_code,
-            response.text[:500],
-        )
-        raise ValueError("lot edit form fields not found")
-
-    return types.LotFields(lot.id, result)
-
-
 def _restock_lot(acc: Account, lot: LotShortcut) -> None:
     for attempt in range(1, RESTOCK_FETCH_RETRY_ATTEMPTS + 1):
         try:
-            fields = _fetch_lot_fields(acc, lot)
+            fields = fetch_lot_fields(acc, lot)
 
             if fields.amount is None:
                 logger.info(

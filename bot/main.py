@@ -17,6 +17,7 @@ from .notifier import notify_crash
 from .raiser import raise_lots_loop
 from .restock import restock_lots_loop
 from .session import enable_golden_seal_auto_refresh
+from .telegram import telegram_loop
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,12 @@ def main() -> None:
 
     threading.Thread(
         target=restock_lots_loop,
+        args=(acc,),
+        daemon=True,
+    ).start()
+
+    threading.Thread(
+        target=telegram_loop,
         args=(acc,),
         daemon=True,
     ).start()

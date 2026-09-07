@@ -61,62 +61,65 @@ def _restock_lot(acc: Account, lot: LotShortcut) -> None:
             time.sleep(RESTOCK_FETCH_RETRY_DELAY)
 
 
+def restock_all_lots(acc: Account) -> None:
+    try:
+        user_obj = acc.get_user(acc.id)
+        lots = user_obj.get_lots()
+
+        logger.info(
+            "Пополнение остатков: найдено %s лотов.",
+            len(lots),
+        )
+
+        for lot in lots:
+            try:
+                _restock_lot(acc, lot)
+            except exceptions.UnauthorizedError:
+                logger.warning(
+                    "Сессия просрочена при обновлении лота %s, "
+                    "обновляю...",
+                    lot.id,
+                )
+                if refresh_session(acc):
+                    try:
+                        _restock_lot(acc, lot)
+                    except exceptions.RequestFailedError as e:
+                        logger.error(
+                            "Не удалось обновить лот %s после "
+                            "переподключения: %s",
+                            lot.id,
+                            e.short_str(),
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Не удалось обновить лот %s после "
+                            "переподключения.",
+                            lot.id,
+                        )
+            except exceptions.RequestFailedError as e:
+                logger.error(
+                    "Ошибка обновления количества товара лота %s: %s",
+                    lot.id,
+                    e.short_str(),
+                )
+            except Exception:
+                logger.exception(
+                    "Ошибка обновления количества товара лота %s.",
+                    lot.id,
+                )
+
+            time.sleep(RESTOCK_DELAY_BETWEEN_LOTS)
+
+    except exceptions.UnauthorizedError:
+        logger.warning(
+            "Сессия просрочена при получении списка лотов, обновляю..."
+        )
+        refresh_session(acc)
+    except Exception:
+        logger.exception("Ошибка получения списка лотов для пополнения.")
+
+
 def restock_lots_loop(acc: Account) -> None:
     while True:
-        try:
-            user_obj = acc.get_user(acc.id)
-            lots = user_obj.get_lots()
-
-            logger.info(
-                "Пополнение остатков: найдено %s лотов.",
-                len(lots),
-            )
-
-            for lot in lots:
-                try:
-                    _restock_lot(acc, lot)
-                except exceptions.UnauthorizedError:
-                    logger.warning(
-                        "Сессия просрочена при обновлении лота %s, "
-                        "обновляю...",
-                        lot.id,
-                    )
-                    if refresh_session(acc):
-                        try:
-                            _restock_lot(acc, lot)
-                        except exceptions.RequestFailedError as e:
-                            logger.error(
-                                "Не удалось обновить лот %s после "
-                                "переподключения: %s",
-                                lot.id,
-                                e.short_str(),
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Не удалось обновить лот %s после "
-                                "переподключения.",
-                                lot.id,
-                            )
-                except exceptions.RequestFailedError as e:
-                    logger.error(
-                        "Ошибка обновления количества товара лота %s: %s",
-                        lot.id,
-                        e.short_str(),
-                    )
-                except Exception:
-                    logger.exception(
-                        "Ошибка обновления количества товара лота %s.",
-                        lot.id,
-                    )
-
-                time.sleep(RESTOCK_DELAY_BETWEEN_LOTS)
-
-        except exceptions.UnauthorizedError:
-            logger.warning(
-                "Сессия просрочена при получении списка лотов, обновляю..."
-            )
-            refresh_session(acc)
-        except Exception:
-            logger.exception("Ошибка получения списка лотов для пополнения.")
-
+        restock_all_lots(acc)
         time.sleep(RESTOCK_INTERVAL)

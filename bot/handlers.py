@@ -1,6 +1,13 @@
 from FunPayAPI import enums
 
+from .guard import get_local_code
 from .mail import get_steam_guard_code
+from .state import is_paused, record
+from .telegram import (
+    notify_buyer_message,
+    notify_code_sent,
+    notify_new_order,
+)
 from .config import (
     TRIGGER_CMD,
     MAX_CODE_REQUEST_ATTEMPTS,
@@ -97,106 +104,7 @@ def _reply_to_review(acc, order_id: str) -> None:
         )
 
 
-def handle_event(acc, event) -> None:
-    if event.type is not enums.EventTypes.NEW_MESSAGE:
-        return
-
-    msg = event.message
-
-    if msg.type is enums.MessageTypes.NEW_FEEDBACK:
-        if match := _ORDER_ID_RE.search(msg.text or ""):
-            _reply_to_review(acc, match.group(1))
-        return
-
-    if msg.author_id == acc.id:
-        return
-
-    if not msg.text:
-        return
-
-    text = msg.text.strip().lower()
-
-    if text != TRIGGER_CMD:
-        return
-
-    chat_id = msg.chat_id
-    buyer = msg.author
-
-    logger.info(
-        f"Команда !code от {buyer}"
-        f" в чате {chat_id}."
-    )
-
-    if _is_rate_limited(msg.author_id):
-        logger.info(
-            "Повторный запрос от %s раньше чем через %s секунд, игнорирую.",
-            buyer,
-            CODE_REQUEST_COOLDOWN_SECONDS,
-        )
-
-        try:
-            acc.send_message(
-                chat_id,
-                "⏳ Код уже был запрошен недавно, "
-                "подождите немного и попробуйте снова.",
-            )
-        except Exception:
-            logger.exception("Ошибка отправки")
-
-        return
-
-    try:
-        has_valid_order = _buyer_has_valid_order(acc, buyer)
-    except Exception:
-        logger.exception(
-            "Не удалось проверить заказы покупателя %s.",
-            buyer,
-        )
-
-        try:
-            acc.send_message(
-                chat_id,
-                "⚠️ Не удалось проверить заказ. Попробуйте позже.",
-            )
-        except Exception:
-            logger.exception("Ошибка отправки")
-
-        return
-
-    if not has_valid_order:
-        logger.info(
-            "У %s нет оплаченного или закрытого заказа, код не выдан.",
-            buyer,
-        )
-
-        try:
-            acc.send_message(
-                chat_id,
-                "❌ Код выдаётся только по оплаченному или закрытому заказу.",
-            )
-        except Exception:
-            logger.exception("Ошибка отправки")
-
-        return
-
-    logger.info("Проверяю почту...")
-
-    try:
-        mail = _connect_mail()
-
-    except Exception:
-        logger.exception("Не удалось подключиться к почте.")
-
-        try:
-            acc.send_message(
-                chat_id,
-                "⚠️ Не удалось подключиться к почте для получения кода.",
-            )
-        except Exception:
-            logger.exception("Ошибка отправки")
-
-        return
-
+def _code_from_mail(acc, mail, chat_id) -> str | None:
     code = None
 
     try:
@@ -257,6 +165,137 @@ def handle_event(acc, event) -> None:
         except Exception:
             pass
 
+    return code
+
+
+def handle_event(acc, event) -> None:
+    if event.type is enums.EventTypes.NEW_ORDER:
+        notify_new_order(event.order)
+        return
+
+    if event.type is not enums.EventTypes.NEW_MESSAGE:
+        return
+
+    msg = event.message
+
+    if msg.type is enums.MessageTypes.NEW_FEEDBACK:
+        if match := _ORDER_ID_RE.search(msg.text or ""):
+            _reply_to_review(acc, match.group(1))
+        return
+
+    if msg.author_id == acc.id:
+        return
+
+    if not msg.text:
+        return
+
+    text = msg.text.strip().lower()
+
+    if text != TRIGGER_CMD:
+        if msg.type is enums.MessageTypes.NON_SYSTEM:
+            notify_buyer_message(msg)
+
+        return
+
+    chat_id = msg.chat_id
+    buyer = msg.author
+
+    logger.info(
+        f"Команда !code от {buyer}"
+        f" в чате {chat_id}."
+    )
+
+    if is_paused():
+        logger.info("Выдача кодов на паузе, запрос от %s отклонён.", buyer)
+        record("denied")
+
+        try:
+            acc.send_message(
+                chat_id,
+                "⏸ Выдача кодов временно приостановлена, "
+                "напишите чуть позже.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    if _is_rate_limited(msg.author_id):
+        logger.info(
+            "Повторный запрос от %s раньше чем через %s секунд, игнорирую.",
+            buyer,
+            CODE_REQUEST_COOLDOWN_SECONDS,
+        )
+
+        try:
+            acc.send_message(
+                chat_id,
+                "⏳ Код уже был запрошен недавно, "
+                "подождите немного и попробуйте снова.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    try:
+        has_valid_order = _buyer_has_valid_order(acc, buyer)
+    except Exception:
+        logger.exception(
+            "Не удалось проверить заказы покупателя %s.",
+            buyer,
+        )
+
+        try:
+            acc.send_message(
+                chat_id,
+                "⚠️ Не удалось проверить заказ. Попробуйте позже.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    if not has_valid_order:
+        logger.info(
+            "У %s нет оплаченного или закрытого заказа, код не выдан.",
+            buyer,
+        )
+        record("denied")
+
+        try:
+            acc.send_message(
+                chat_id,
+                "❌ Код выдаётся только по оплаченному или закрытому заказу.",
+            )
+        except Exception:
+            logger.exception("Ошибка отправки")
+
+        return
+
+    code = get_local_code()
+
+    if code is None:
+        logger.info("Проверяю почту...")
+
+        try:
+            mail = _connect_mail()
+
+        except Exception:
+            logger.exception("Не удалось подключиться к почте.")
+
+            try:
+                acc.send_message(
+                    chat_id,
+                    "⚠️ Не удалось подключиться к почте для получения кода.",
+                )
+            except Exception:
+                logger.exception("Ошибка отправки")
+
+            return
+
+        code = _code_from_mail(acc, mail, chat_id)
+
     if code:
         reply = (
             f"🔑 Steam Guard: {code}\n"
@@ -276,6 +315,9 @@ def handle_event(acc, event) -> None:
             chat_id,
             reply,
         )
+
+        if code:
+            notify_code_sent(buyer, code)
 
     except Exception:
         logger.exception("Ошибка отправки")

@@ -8,6 +8,8 @@ from FunPayAPI import Account
 
 from . import state
 from .config import (
+    STATS_MONTH_DAYS,
+    STATS_WEEK_DAYS,
     TELEGRAM_API_TIMEOUT,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
@@ -25,7 +27,9 @@ logger = logging.getLogger(__name__)
 API_URL = "https://api.telegram.org/bot{token}/{method}"
 
 HELP_TEXT = (
-    "/stats — статистика за сегодня\n"
+    "/stats_day — статистика за сегодня\n"
+    "/stats_week — статистика за неделю\n"
+    "/stats_month — статистика за месяц\n"
     "/lots — список лотов с ценами\n"
     "/price <id> <цена> — сменить цену лота\n"
     "/restock — пополнить остатки прямо сейчас\n"
@@ -70,9 +74,18 @@ def send(text: str) -> int | None:
     )
 
     if not data or not data.get("ok"):
+        logger.warning("Сообщение в Telegram не отправлено: %r", text)
         return None
 
-    return data["result"]["message_id"]
+    message_id = data["result"]["message_id"]
+
+    logger.info(
+        "В Telegram отправлено (message_id=%s): %s",
+        message_id,
+        text.replace("\n", " | "),
+    )
+
+    return message_id
 
 
 def remember_chat(message_id: int | None, chat_id: int) -> None:
@@ -117,12 +130,22 @@ def notify_code_sent(buyer: str, code: str) -> None:
     send(f"🔑 Код {code} выдан покупателю {buyer}.")
 
 
-def _format_stats() -> str:
-    counters = state.snapshot()
+def _stats_header(days: int) -> str:
+    if days <= 1:
+        return f"📊 Статистика за {state.stats_day():%d.%m.%Y}"
+
+    return (
+        f"📊 Статистика за {days} дн. "
+        f"({state.period_start(days):%d.%m} — {state.stats_day():%d.%m})"
+    )
+
+
+def _format_stats(days: int = 1) -> str:
+    counters = state.snapshot(days)
     status = "на паузе" if state.is_paused() else "работает"
 
     return (
-        f"📊 Статистика за {state.stats_day():%d.%m.%Y}\n"
+        f"{_stats_header(days)}\n"
         f"Заказы: {counters['orders']}\n"
         f"Сообщения: {counters['messages']}\n"
         f"Выдано кодов: {counters['codes']}\n"
@@ -170,8 +193,14 @@ def _handle_command(acc: Account, text: str) -> str:
     command, _, argument = text.partition(" ")
     command = command.split("@")[0].lower()
 
-    if command == "/stats":
+    if command == "/stats_day":
         return _format_stats()
+
+    if command == "/stats_week":
+        return _format_stats(STATS_WEEK_DAYS)
+
+    if command == "/stats_month":
+        return _format_stats(STATS_MONTH_DAYS)
 
     if command == "/lots":
         return _format_lots(acc)

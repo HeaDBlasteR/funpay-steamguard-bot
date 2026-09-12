@@ -49,7 +49,8 @@ Notifications: startup, new order, new buyer message, delivered code, crash.
 
 Commands:
 
-- `/stats` — orders, messages, delivered codes and refusals for the current day, plus paused/running status
+- `/stats_day` — orders, messages, delivered codes and refusals for the current day, plus paused/running status
+- `/stats_week`, `/stats_month` — the same counters summed over the last 7 and 30 days, with the date range in the header
 - `/lots` — all lots with id, price and title
 - `/price <id> <price>` — change one lot's price
 - `/restock` — run a restock pass immediately instead of waiting for the timer
@@ -59,7 +60,10 @@ Replying to a "new buyer message" notification sends your text straight to that
 FunPay chat. Pending updates from before a restart are dropped, so a queued
 command never fires against a bot that has just come back up.
 
-Counters live in memory only and reset at midnight and on restart.
+Counters are kept per day in `data/stats.json` (no database), so weekly and
+monthly totals survive restarts; days older than 180 are pruned on write. Every
+message the panel sends is logged, so the terminal shows what went out to
+Telegram and what Telegram refused.
 
 ## Lot editor
 

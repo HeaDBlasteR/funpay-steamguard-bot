@@ -19,6 +19,13 @@ TELEGRAM_POLL_ERROR_DELAY = 5
 TELEGRAM_CHAT_MAP_LIMIT = 500
 TELEGRAM_LOTS_LIMIT = 40
 TELEGRAM_MESSAGE_LIMIT = 3500
+TELEGRAM_MUTED_SNIPPETS = (
+    "выдан покупателю",
+    "Буду рад вашему отзыву",
+    "Новый заказ #",
+    "Пароль:",
+    "Password:",
+)
 
 STATS_FILE = "stats.json"
 STATS_HISTORY_DAYS = 180

@@ -16,6 +16,7 @@ from .config import (
     TELEGRAM_CHAT_MAP_LIMIT,
     TELEGRAM_LOTS_LIMIT,
     TELEGRAM_MESSAGE_LIMIT,
+    TELEGRAM_MUTED_SNIPPETS,
     TELEGRAM_POLL_ERROR_DELAY,
     TELEGRAM_POLL_TIMEOUT,
 )
@@ -60,8 +61,19 @@ def _call(method: str, payload: dict, timeout: int) -> dict | None:
         return None
 
 
+def _is_muted(text: str) -> bool:
+    return any(snippet in text for snippet in TELEGRAM_MUTED_SNIPPETS)
+
+
 def send(text: str) -> int | None:
     if not is_enabled():
+        return None
+
+    if _is_muted(text):
+        logger.info(
+            "Сообщение в чёрном списке, не отправляю: %s",
+            text.replace("\n", " | "),
+        )
         return None
 
     data = _call(

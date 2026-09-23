@@ -42,6 +42,9 @@ MUTED = "#6b7280"
 ACCENT = "#2f6fed"
 ACCENT_DARK = "#2559c4"
 DANGER = "#c0392b"
+SUCCESS = "#2e9e5b"
+SUCCESS_DARK = "#24804a"
+SUCCESS_TEXT = "#ffffff"
 
 TITLE_MIN_WIDTH = 320
 PRICE_WIDTH = 96
@@ -52,6 +55,12 @@ ROW_PADDING = 24
 ROW_HEIGHT = 30
 RESIZE_DEBOUNCE_MS = 160
 PREVIEW_HEIGHT = 26
+
+TOAST_WIDTH = 280
+TOAST_MARGIN = 20
+TOAST_HOLD_MS = 2600
+TOAST_FADE_MS = 40
+TOAST_FADE_STEP = 0.08
 
 SINGLE_LINE_FIELDS = ("title_ru", "title_en")
 MULTI_LINE_FIELDS = (
@@ -197,6 +206,49 @@ def fixed_cell(parent, width, height, background):
     return cell
 
 
+def show_toast(parent, text):
+    root = parent.winfo_toplevel()
+    toast = tk.Toplevel(root)
+    toast.overrideredirect(True)
+    toast.attributes("-topmost", True)
+    toast.configure(background=SUCCESS_DARK)
+
+    body = tk.Frame(toast, background=SUCCESS)
+    body.pack(fill="both", expand=True, padx=1, pady=1)
+    tk.Label(
+        body,
+        text=text,
+        background=SUCCESS,
+        foreground=SUCCESS_TEXT,
+        font=("Segoe UI", 10),
+        wraplength=TOAST_WIDTH - 32,
+        justify="left",
+        anchor="w",
+    ).pack(fill="both", expand=True, padx=16, pady=12)
+
+    toast.update_idletasks()
+    width = max(toast.winfo_reqwidth(), TOAST_WIDTH)
+    height = toast.winfo_reqheight()
+    right = root.winfo_rootx() + root.winfo_width()
+    bottom = root.winfo_rooty() + root.winfo_height()
+    toast.geometry(
+        f"{width}x{height}"
+        f"+{right - width - TOAST_MARGIN}"
+        f"+{bottom - height - TOAST_MARGIN}"
+    )
+
+    def fade(alpha):
+        if alpha <= 0:
+            toast.destroy()
+            return
+
+        toast.attributes("-alpha", alpha)
+        toast.after(TOAST_FADE_MS, lambda: fade(alpha - TOAST_FADE_STEP))
+
+    toast.after(TOAST_HOLD_MS, lambda: fade(1.0))
+    return toast
+
+
 def make_scrollable(parent, background):
     canvas = tk.Canvas(
         parent, highlightthickness=0, background=background, bd=0
@@ -207,16 +259,29 @@ def make_scrollable(parent, background):
     window = canvas.create_window((0, 0), window=inner, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
-    inner.bind(
-        "<Configure>",
-        lambda _: canvas.configure(scrollregion=canvas.bbox("all")),
-    )
-    canvas.bind(
-        "<Configure>",
-        lambda event: canvas.itemconfigure(window, width=event.width),
-    )
+    def refresh_region(_=None):
+        content = inner.winfo_reqheight()
+        visible = canvas.winfo_height()
+        canvas.configure(
+            scrollregion=(0, 0, canvas.winfo_width(), max(content, visible))
+        )
+
+        if content <= visible:
+            canvas.yview_moveto(0)
+
+    def on_canvas_configure(event):
+        canvas.itemconfigure(window, width=event.width)
+        refresh_region()
+
+    inner.bind("<Configure>", refresh_region, add="+")
+    canvas.bind("<Configure>", on_canvas_configure, add="+")
 
     def on_wheel(event):
+        first, last = canvas.yview()
+
+        if not should_scroll_inner(first, last, event.delta):
+            return
+
         canvas.yview_scroll(int(-event.delta / 120), "units")
 
     canvas.bind("<Enter>", lambda _: canvas.bind_all("<MouseWheel>", on_wheel))
@@ -501,9 +566,10 @@ class LotDialog(tk.Toplevel):
             messagebox.showerror("Ошибка", str(error), parent=self)
             return
 
-        messagebox.showinfo("Готово", "Лот сохранён.", parent=self)
+        parent = self.master
         self.on_saved()
         self.destroy()
+        show_toast(parent, "Лот сохранён.")
 
 
 class PriceEditor:
@@ -571,7 +637,7 @@ class PriceEditor:
 
         self.title_width = TITLE_MIN_WIDTH
         self._resize_job = None
-        self.inner.bind("<Configure>", self._on_resize)
+        self.inner.bind("<Configure>", self._on_resize, add="+")
 
         footer = ttk.Frame(root, style="Card.TFrame", padding=(16, 10))
         footer.pack(fill="x", padx=12, pady=(0, 12))
@@ -786,7 +852,7 @@ class PriceEditor:
             return
 
         if not changes:
-            messagebox.showinfo("Нет изменений", "Ни одна цена не изменена.")
+            show_toast(self.root, "Ни одна цена не изменена.")
             return
 
         if not messagebox.askyesno(
@@ -839,7 +905,7 @@ class PriceEditor:
                 f"Успешно: {len(saved)}\nОшибок: {len(failed)}\n\n{details}",
             )
         else:
-            messagebox.showinfo("Готово", f"Цены обновлены: {len(saved)}")
+            show_toast(self.root, f"Цены обновлены: {len(saved)}")
 
 
 def main() -> None:

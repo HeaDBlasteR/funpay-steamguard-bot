@@ -32,8 +32,11 @@ logger = logging.getLogger(__name__)
 
 _ORDER_ID_RE = re.compile(r"#([A-Z0-9]{8})")
 
+CHAT_PREVIEW_MESSAGE_ID = 0
+SYSTEM_AUTHOR_ID = 0
+
 _last_request_lock = threading.Lock()
-_last_request_time: dict[int, float] = {}
+_last_request_time: dict[int | str, float] = {}
 
 
 def _connect_mail() -> imaplib.IMAP4_SSL:
@@ -42,16 +45,23 @@ def _connect_mail() -> imaplib.IMAP4_SSL:
     return mail
 
 
-def _is_rate_limited(buyer_id: int) -> bool:
+def _is_chat_preview(msg) -> bool:
+    return (
+        getattr(msg, "id", None) == CHAT_PREVIEW_MESSAGE_ID
+        and msg.author_id == SYSTEM_AUTHOR_ID
+    )
+
+
+def _is_rate_limited(chat_id: int | str) -> bool:
     now = time.time()
 
     with _last_request_lock:
-        last = _last_request_time.get(buyer_id, 0)
+        last = _last_request_time.get(chat_id, 0)
 
         if now - last < CODE_REQUEST_COOLDOWN_SECONDS:
             return True
 
-        _last_request_time[buyer_id] = now
+        _last_request_time[chat_id] = now
         return False
 
 
@@ -192,9 +202,17 @@ def handle_event(acc, event) -> None:
     text = msg.text.strip().lower()
 
     if text != TRIGGER_CMD:
-        if msg.type is enums.MessageTypes.NON_SYSTEM:
-            notify_buyer_message(msg)
+        if msg.type is not enums.MessageTypes.NON_SYSTEM:
+            return
 
+        if _is_chat_preview(msg):
+            logger.info(
+                "Чат %s: текст из закладок без автора, в Telegram не шлю.",
+                msg.chat_id,
+            )
+            return
+
+        notify_buyer_message(msg)
         return
 
     chat_id = msg.chat_id
@@ -220,7 +238,7 @@ def handle_event(acc, event) -> None:
 
         return
 
-    if _is_rate_limited(msg.author_id):
+    if _is_rate_limited(chat_id):
         logger.info(
             "Повторный запрос от %s раньше чем через %s секунд, игнорирую.",
             buyer,

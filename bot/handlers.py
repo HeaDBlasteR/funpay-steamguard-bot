@@ -1,8 +1,9 @@
+from bs4 import BeautifulSoup
 from FunPayAPI import enums
 
 from .guard import get_local_code
 from .mail import get_steam_guard_code
-from .state import is_paused, record
+from .state import is_paused, mark_help_offered, record
 from .telegram import (
     notify_buyer_message,
     notify_code_sent,
@@ -10,6 +11,15 @@ from .telegram import (
 )
 from .config import (
     TRIGGER_CMD,
+    HELP_CMD,
+    HELP_COOLDOWN_SECONDS,
+    HELP_MESSAGE_DELAY,
+    HELP_HINT_TEXT,
+    HELP_HINT_TEXT_EN,
+    HELP_MESSAGES,
+    HELP_MESSAGES_EN,
+    CHAT_LANGUAGE_TITLE,
+    NATIVE_LANGUAGE,
     MAX_CODE_REQUEST_ATTEMPTS,
     CODE_REQUEST_DELAY,
     CODE_REQUEST_COOLDOWN_SECONDS,
@@ -37,6 +47,7 @@ SYSTEM_AUTHOR_ID = 0
 
 _last_request_lock = threading.Lock()
 _last_request_time: dict[int | str, float] = {}
+_last_help_time: dict[int | str, float] = {}
 
 
 def _connect_mail() -> imaplib.IMAP4_SSL:
@@ -52,17 +63,88 @@ def _is_chat_preview(msg) -> bool:
     )
 
 
-def _is_rate_limited(chat_id: int | str) -> bool:
+def _is_rate_limited(
+    chat_id: int | str,
+    last_times: dict[int | str, float],
+    cooldown: float,
+) -> bool:
     now = time.time()
 
     with _last_request_lock:
-        last = _last_request_time.get(chat_id, 0)
+        last = last_times.get(chat_id, 0)
 
-        if now - last < CODE_REQUEST_COOLDOWN_SECONDS:
+        if now - last < cooldown:
             return True
 
-        _last_request_time[chat_id] = now
+        last_times[chat_id] = now
         return False
+
+
+def _send(acc, chat_id, text: str) -> None:
+    try:
+        acc.send_message(chat_id, text)
+    except Exception:
+        logger.exception("Ошибка отправки")
+
+
+def _is_foreign(acc, chat_id) -> bool:
+    try:
+        chat = acc.get_chat(chat_id)
+    except Exception:
+        logger.exception(
+            "Не удалось загрузить чат %s для определения языка.",
+            chat_id,
+        )
+        return False
+
+    parser = BeautifulSoup(chat.html, "html.parser")
+
+    for item in parser.find_all("div", {"class": "param-item"}):
+        title = item.find("h5")
+
+        if title is None or title.text.strip() != CHAT_LANGUAGE_TITLE:
+            continue
+
+        value = item.find("div")
+        return value is not None and value.text.strip() != NATIVE_LANGUAGE
+
+    return False
+
+
+def _offer_help(acc, msg) -> None:
+    if not mark_help_offered(msg.chat_id):
+        return
+
+    if _is_foreign(acc, msg.chat_id):
+        _send(acc, msg.chat_id, HELP_HINT_TEXT_EN)
+    else:
+        _send(acc, msg.chat_id, HELP_HINT_TEXT)
+
+    logger.info("Чат %s: предложил покупателю %s.", msg.chat_id, HELP_CMD)
+
+
+def _send_help(acc, msg) -> None:
+    chat_id = msg.chat_id
+    mark_help_offered(chat_id)
+
+    if _is_rate_limited(chat_id, _last_help_time, HELP_COOLDOWN_SECONDS):
+        logger.info(
+            "Повторный %s в чате %s раньше чем через %s секунд, игнорирую.",
+            HELP_CMD,
+            chat_id,
+            HELP_COOLDOWN_SECONDS,
+        )
+        return
+
+    parts = HELP_MESSAGES_EN if _is_foreign(acc, chat_id) else HELP_MESSAGES
+
+    logger.info("Команда %s от %s в чате %s.", HELP_CMD, msg.author, chat_id)
+
+    for index, part in enumerate(parts):
+        if index:
+            time.sleep(HELP_MESSAGE_DELAY)
+
+        _send(acc, chat_id, part)
 
 
 def _buyer_has_valid_order(acc, buyer_username: str) -> bool:
@@ -201,6 +283,10 @@ def handle_event(acc, event) -> None:
 
     text = msg.text.strip().lower()
 
+    if text == HELP_CMD:
+        _send_help(acc, msg)
+        return
+
     if text != TRIGGER_CMD:
         if msg.type is not enums.MessageTypes.NON_SYSTEM:
             return
@@ -213,10 +299,12 @@ def handle_event(acc, event) -> None:
             return
 
         notify_buyer_message(msg)
+        _offer_help(acc, msg)
         return
 
     chat_id = msg.chat_id
     buyer = msg.author
+    mark_help_offered(chat_id)
 
     logger.info(
         f"Команда !code от {buyer}"
@@ -238,7 +326,11 @@ def handle_event(acc, event) -> None:
 
         return
 
-    if _is_rate_limited(chat_id):
+    if _is_rate_limited(
+        chat_id,
+        _last_request_time,
+        CODE_REQUEST_COOLDOWN_SECONDS,
+    ):
         logger.info(
             "Повторный запрос от %s раньше чем через %s секунд, игнорирую.",
             buyer,

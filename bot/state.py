@@ -5,7 +5,7 @@ import threading
 from datetime import date, timedelta
 from pathlib import Path
 
-from .config import STATS_FILE, STATS_HISTORY_DAYS
+from .config import HELP_OFFERED_FILE, STATS_FILE, STATS_HISTORY_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _lock = threading.Lock()
 _paused = False
 _history: dict[str, dict[str, int]] | None = None
+_help_offered: set[str] | None = None
 
 
 def is_paused() -> bool:
@@ -120,3 +121,55 @@ def snapshot(days: int = 1) -> dict[str, int]:
 
 def stats_day() -> date:
     return date.today()
+
+
+def _help_offered_path() -> Path:
+    return DATA_DIR / HELP_OFFERED_FILE
+
+
+def _read_help_offered() -> set[str]:
+    path = _help_offered_path()
+
+    if not path.exists():
+        return set()
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("Не удалось прочитать список чатов из %s.", path)
+        return set()
+
+    if not isinstance(raw, list):
+        return set()
+
+    return {str(chat_id) for chat_id in raw}
+
+
+def _write_help_offered(chats: set[str]) -> None:
+    path = _help_offered_path()
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(sorted(chats), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        logger.exception("Не удалось сохранить список чатов в %s.", path)
+
+
+def mark_help_offered(chat_id: int | str) -> bool:
+    global _help_offered
+
+    with _lock:
+        if _help_offered is None:
+            _help_offered = _read_help_offered()
+
+        key = str(chat_id)
+
+        if key in _help_offered:
+            return False
+
+        _help_offered.add(key)
+        _write_help_offered(_help_offered)
+        return True

@@ -5,7 +5,12 @@ import threading
 from datetime import date, timedelta
 from pathlib import Path
 
-from .config import HELP_OFFERED_FILE, STATS_FILE, STATS_HISTORY_DAYS
+from .config import (
+    CONFIRM_REMINDER_FILE,
+    HELP_OFFERED_FILE,
+    STATS_FILE,
+    STATS_HISTORY_DAYS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +22,7 @@ _lock = threading.Lock()
 _paused = False
 _history: dict[str, dict[str, int]] | None = None
 _help_offered: set[str] | None = None
+_confirm_reminders: dict[str, dict[str, float]] | None = None
 
 
 def is_paused() -> bool:
@@ -173,3 +179,87 @@ def mark_help_offered(chat_id: int | str) -> bool:
         _help_offered.add(key)
         _write_help_offered(_help_offered)
         return True
+
+
+def _confirm_reminders_path() -> Path:
+    return DATA_DIR / CONFIRM_REMINDER_FILE
+
+
+def _read_confirm_reminders() -> dict[str, dict[str, float]]:
+    path = _confirm_reminders_path()
+
+    if not path.exists():
+        return {}
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("Не удалось прочитать напоминания из %s.", path)
+        return {}
+
+    if not isinstance(raw, dict):
+        return {}
+
+    return {
+        order_id: {
+            "chat_id": int(record["chat_id"]),
+            "reminded_at": float(record["reminded_at"]),
+        }
+        for order_id, record in raw.items()
+        if isinstance(record, dict)
+        and "chat_id" in record
+        and "reminded_at" in record
+    }
+
+
+def _write_confirm_reminders(reminders: dict[str, dict[str, float]]) -> None:
+    path = _confirm_reminders_path()
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(reminders, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    except Exception:
+        logger.exception("Не удалось сохранить напоминания в %s.", path)
+
+
+def _loaded_confirm_reminders() -> dict[str, dict[str, float]]:
+    global _confirm_reminders
+
+    if _confirm_reminders is None:
+        _confirm_reminders = _read_confirm_reminders()
+
+    return _confirm_reminders
+
+
+def confirm_reminder(order_id: str) -> dict[str, float] | None:
+    with _lock:
+        record = _loaded_confirm_reminders().get(order_id)
+        return dict(record) if record else None
+
+
+def save_confirm_reminder(
+    order_id: str,
+    chat_id: int,
+    reminded_at: float,
+) -> None:
+    with _lock:
+        reminders = _loaded_confirm_reminders()
+        reminders[order_id] = {"chat_id": chat_id, "reminded_at": reminded_at}
+        _write_confirm_reminders(reminders)
+
+
+def keep_confirm_reminders(order_ids: set[str]) -> None:
+    with _lock:
+        reminders = _loaded_confirm_reminders()
+        stale = [order_id for order_id in reminders if order_id not in order_ids]
+
+        if not stale:
+            return
+
+        for order_id in stale:
+            del reminders[order_id]
+
+        _write_confirm_reminders(reminders)

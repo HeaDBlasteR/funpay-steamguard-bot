@@ -87,7 +87,7 @@ def _send(acc, chat_id, text: str) -> None:
         logger.exception("Ошибка отправки")
 
 
-def _is_foreign(acc, chat_id) -> bool:
+def is_foreign_chat(acc, chat_id) -> bool:
     try:
         chat = acc.get_chat(chat_id)
     except Exception:
@@ -115,7 +115,7 @@ def _offer_help(acc, msg) -> None:
     if not mark_help_offered(msg.chat_id):
         return
 
-    if _is_foreign(acc, msg.chat_id):
+    if is_foreign_chat(acc, msg.chat_id):
         _send(acc, msg.chat_id, HELP_HINT_TEXT_EN)
     else:
         _send(acc, msg.chat_id, HELP_HINT_TEXT)
@@ -136,7 +136,7 @@ def _send_help(acc, msg) -> None:
         )
         return
 
-    parts = HELP_MESSAGES_EN if _is_foreign(acc, chat_id) else HELP_MESSAGES
+    parts = HELP_MESSAGES_EN if is_foreign_chat(acc, chat_id) else HELP_MESSAGES
 
     logger.info("Команда %s от %s в чате %s.", HELP_CMD, msg.author, chat_id)
 
@@ -304,7 +304,6 @@ def handle_event(acc, event) -> None:
 
     chat_id = msg.chat_id
     buyer = msg.author
-    mark_help_offered(chat_id)
 
     logger.info(
         f"Команда !code от {buyer}"

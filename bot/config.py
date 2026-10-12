@@ -118,6 +118,23 @@ HELP_MESSAGES_EN = (
     f"📄 Full guide (read it completely): {HELP_GUIDE_URL}",
 )
 
+CONFIRM_REMINDER_FILE = "confirm_reminders.json"
+CONFIRM_REMINDER_INTERVAL = 24 * 3600
+CONFIRM_REMINDER_CHECK_INTERVAL = 3600
+CONFIRM_REMINDER_SEND_DELAY = 10
+CONFIRM_REMINDER_BLOCK_RETRY_DELAY = 60
+
+CONFIRM_REMINDER_TEXT = (
+    "Пожалуйста, не забудьте подтвердить заказ. Зайдите в раздел "
+    "«Покупки», выберите его в списке и нажмите кнопку "
+    "«Подтвердить выполнение заказа»."
+)
+CONFIRM_REMINDER_TEXT_EN = (
+    "Please don't forget to confirm the order. Go to the «Purchases» "
+    "section, select it in the list and press the button that confirms "
+    "the order is completed."
+)
+
 RESTART_DELAY_SECONDS = 15
 
 EVENT_HANDLER_MAX_WORKERS = 10

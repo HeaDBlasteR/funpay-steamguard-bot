@@ -8,6 +8,7 @@ Type=simple
 User=__SERVICE_USER__
 Group=__SERVICE_USER__
 WorkingDirectory=__INSTALL_DIR__
+Environment=TZ=Europe/Moscow
 ExecStart=__INSTALL_DIR__/.venv/bin/python -m bot
 Restart=always
 RestartSec=5

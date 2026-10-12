@@ -12,6 +12,7 @@ listing texts in bulk.
 - **Order verification** — the code is only delivered to buyers with a paid or closed order; buyers with no order or a refunded one are turned away
 - **Per-buyer cooldown** — repeat `!code` requests from the same buyer within 60 seconds are deduped instead of re-triggering a mail lookup
 - **Resilient mail fetching** — retries across multiple attempts, auto-reconnects on dropped IMAP connections, filters by sender and message freshness, and parses both English and Russian code formats
+- **Order confirmation reminders** — a day after a purchase, and every day after that, buyers who still haven't confirmed the order get a reminder in chat. Existing unconfirmed orders are picked up too. Reminders go out 10 seconds apart; if FunPay refuses two messages in a row (it limits messaging many buyers at once), the bot stops and retries every minute from the buyer it stopped at. The service runs with `TZ=Europe/Moscow`, because FunPay shows order times in Moscow time and FunPayAPI compares them with the local clock
 - **Automatic review replies** — a canned thank-you is posted under every 5-star review left on your sales. Reviews *you* leave as a buyer are never touched (the same FunPay endpoint serves reviews and seller replies, so replying to your own review would overwrite it)
 - **Automatic lot bumping** — raises lots per category, honoring the wait time FunPay reports per category instead of guessing a fixed interval
 - **Automatic restock** — periodically resets lot quantities so listings don't run dry, retrying transient HTTP errors

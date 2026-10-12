@@ -15,6 +15,7 @@ from .config import (
 from .handlers import handle_event
 from .notifier import notify_crash
 from .raiser import raise_lots_loop
+from .reminder import confirm_reminder_loop
 from .restock import restock_lots_loop
 from .session import enable_golden_seal_auto_refresh
 from .telegram import telegram_loop
@@ -58,6 +59,12 @@ def main() -> None:
 
     threading.Thread(
         target=restock_lots_loop,
+        args=(acc,),
+        daemon=True,
+    ).start()
+
+    threading.Thread(
+        target=confirm_reminder_loop,
         args=(acc,),
         daemon=True,
     ).start()
